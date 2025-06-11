@@ -2,6 +2,42 @@
 
 Integration tests for the Snowflake Test App that verify the endpoint's functionalities.
 
+## Test Coverage
+
+This test suite provides comprehensive coverage for all Snowflake V2 connector endpoints:
+
+### Core Endpoints
+- **TestConnectionEndpointIntegrationTest.cs** - Tests `/testconnection` endpoint for connection validation
+- **DatasetEndpointIntegrationTest.cs** - Tests `/datasets` endpoint for listing datasets
+- **DataSetsMetadataEndpointIntegrationTest.cs** - Tests `/$metadata.json/datasets` endpoint for datasets metadata
+
+### Table Operations
+- **TableEndpointIntegrationTest.cs** - Tests `/datasets/{dataset}/tables` endpoint for listing tables
+- **TableMetadataEndpointIntegrationTest.cs** - Tests `/$metadata.json/datasets/{dataset}/tables/{table}` endpoint for table metadata
+
+### Data Operations (CRUD)
+- **TableDataEndpointIntegrationTest.cs** - Tests table data endpoints for:
+  - GET `/datasets/{dataset}/tables/{table}/items` - List items
+  - GET `/datasets/{dataset}/tables/{table}/items/{id}` - Get specific item
+  - POST `/datasets/{dataset}/tables/{table}/items` - Create new item
+  - PATCH/PUT `/datasets/{dataset}/tables/{table}/items/{id}` - Update item
+  - DELETE `/datasets/{dataset}/tables/{table}/items/{id}` - Delete item
+
+### SQL Operations
+- **SqlEndpointIntegrationTest.cs** - Tests SQL API endpoints for:
+  - POST `/sql` - Execute SQL statements
+  - POST `/sql/{statementHandle}` - Get query results
+  - POST `/sql/{statementHandle}/cancel` - Cancel running queries
+
+### Trigger Operations
+- **TriggerEndpointIntegrationTest.cs** - Tests trigger endpoints for:
+  - `/datasets/{dataset}/tables/{table}/onnewitems` - New items trigger
+  - `/datasets/{dataset}/tables/{table}/onupdateditems` - Updated items trigger
+  - `/datasets/{dataset}/tables/{table}/onchangeditems` - Changed items trigger
+  - `/datasets/{dataset}/tables/{table}/ondeleteditems` - Deleted items trigger
+
+Each test file includes both positive (with authentication) and negative (without authentication, with invalid parameters) test cases to ensure comprehensive endpoint validation.
+
 ## Quick Start
 
 ### Method 1: Visual Studio (Recommended)
@@ -62,8 +98,15 @@ Your test directory should look like this:
 SnowflakeTestApp.Tests/
 ├── test-secrets.json          ← Your secrets file (not committed to git)
 ├── test-secrets.json.example  ← Example template
+├── BaseIntegrationTest.cs     ← Base class for all integration tests
 ├── DatasetEndpointIntegrationTest.cs
+├── DataSetsMetadataEndpointIntegrationTest.cs
+├── SqlEndpointIntegrationTest.cs
+├── TableDataEndpointIntegrationTest.cs
+├── TableEndpointIntegrationTest.cs
+├── TableMetadataEndpointIntegrationTest.cs
 ├── TestConnectionEndpointIntegrationTest.cs
+├── TriggerEndpointIntegrationTest.cs
 └── ...
 ```
 

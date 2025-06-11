@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Threading.Tasks;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Net;
 
 namespace SnowflakeTestApp.Tests
 {
@@ -25,8 +26,8 @@ namespace SnowflakeTestApp.Tests
             HttpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {testToken}");
 
             var response = await HttpClient.GetAsync($"{BaseUrl}/testconnection");
-            Assert.IsTrue(response.IsSuccessStatusCode, $"Expected success but got {response.StatusCode}");
-            Assert.AreEqual(System.Net.HttpStatusCode.OK, response.StatusCode, "Expected HTTP 200 OK status code");
+            AssertStatusCode(response, HttpStatusCode.OK);
+            AssertResponseHasContent(response);
         }
 
         /// <summary>
@@ -36,8 +37,62 @@ namespace SnowflakeTestApp.Tests
         public async Task TestConnectionEndpoint_WithoutAuth_ReturnsUnauthorized()
         {
             var response = await HttpClient.GetAsync($"{BaseUrl}/testconnection");
+            Assert.IsTrue(response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden,
+                         $"Expected Unauthorized (401) or Forbidden (403) but got {(int)response.StatusCode} {response.StatusCode}");
+        }
 
-            Assert.IsFalse(response.IsSuccessStatusCode, $"Expected failure but got {response.StatusCode}");
+        /// <summary>
+        /// Test the endpoint with invalid authorization token
+        /// </summary>
+        [TestMethod]
+        public async Task TestConnectionEndpoint_WithInvalidAuth_ReturnsUnauthorized()
+        {
+            HttpClient.DefaultRequestHeaders.Add("Authorization", "Bearer invalid-token");
+
+            var response = await HttpClient.GetAsync($"{BaseUrl}/testconnection");
+            Assert.IsTrue(response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden,
+                         $"Expected Unauthorized (401) or Forbidden (403) but got {(int)response.StatusCode} {response.StatusCode}");
+        }
+
+        /// <summary>
+        /// Test the endpoint with malformed authorization header
+        /// </summary>
+        [TestMethod]
+        public async Task TestConnectionEndpoint_WithMalformedAuth_ReturnsUnauthorized()
+        {
+            HttpClient.DefaultRequestHeaders.Add("Authorization", "InvalidFormat token-here");
+
+            var response = await HttpClient.GetAsync($"{BaseUrl}/testconnection");
+            Assert.IsTrue(response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.BadRequest,
+                         $"Expected Unauthorized (401) or BadRequest (400) but got {(int)response.StatusCode} {response.StatusCode}");
+        }
+
+        /// <summary>
+        /// Test that successful connection returns valid JSON response
+        /// </summary>
+        [TestMethod]
+        public async Task TestConnectionEndpoint_WithAuth_ReturnsValidJson()
+        {
+            var testToken = GetTestToken();
+            HttpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {testToken}");
+
+            var response = await HttpClient.GetAsync($"{BaseUrl}/testconnection");
+            AssertStatusCode(response, HttpStatusCode.OK);
+            AssertValidJsonResponse(response);
+        }
+
+        /// <summary>
+        /// Test HTTP method restrictions (should only accept GET)
+        /// </summary>
+        [TestMethod]
+        public async Task TestConnectionEndpoint_WithPostMethod_ReturnsMethodNotAllowed()
+        {
+            var testToken = GetTestToken();
+            HttpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {testToken}");
+
+            var response = await HttpClient.PostAsync($"{BaseUrl}/testconnection", new StringContent(""));
+            Assert.IsTrue(response.StatusCode == HttpStatusCode.MethodNotAllowed || response.StatusCode == HttpStatusCode.NotFound,
+                         $"Expected MethodNotAllowed (405) or NotFound (404) but got {(int)response.StatusCode} {response.StatusCode}");
         }
     }
 } 
