@@ -37,7 +37,162 @@ Integration tests for the Snowflake Test App that verify the endpoint's function
    dotnet test SnowflakeTestApp.Tests/SnowflakeTestApp.Tests.csproj
    ```
 
+## Setting Up Bearer Token for Tests
+
+Some integration tests require authentication with a valid bearer token. To set this up:
+
+### 1. Create the Secrets File
+
+Create a file named `test-secrets.json` in the `SnowflakeTestApp.Tests` directory:
+
+```json
+{
+  "BearerToken": "your-actual-bearer-token-here"
+}
+```
+
+### 2. Add Your Bearer Token
+
+Replace `"your-actual-bearer-token-here"` with your actual OAuth bearer token. You can obtain this token by following the "Generating OAuth Tokens" section below.
+
+### 3. Example File Structure
+
+Your test directory should look like this:
+```
+SnowflakeTestApp.Tests/
+├── test-secrets.json          ← Your secrets file (not committed to git)
+├── test-secrets.json.example  ← Example template
+├── DatasetEndpointIntegrationTest.cs
+├── TestConnectionEndpointIntegrationTest.cs
+└── ...
+```
+
+### 4. Security Notes
+
+- The `test-secrets.json` file is automatically ignored by git (added to `.gitignore`)
+- Never commit actual tokens to version control
+- Use the `test-secrets.json.example` file as a template for other developers
+
+### 5. Running Tests Without Secrets
+
+If the `test-secrets.json` file is missing or doesn't contain a valid token, tests that require authentication will be marked as "Inconclusive" rather than failing, with a helpful message explaining how to set up the secrets file.
+
 ## Troubleshooting
 
 - **Test fails**: Ensure SnowflakeTestApp is running at `https://localhost:44362`
 - **Connection issues**: Check that the application started successfully without errors
+
+## Generating OAuth Tokens
+
+This guide walks you through setting up OAuth authentication for Snowflake using the Authorization Code Grant flow.
+
+### Prerequisites
+
+- **ACCOUNTADMIN** role access for creating security integrations
+- A non-admin user account for testing (default role must not be ACCOUNTADMIN, SECURITYADMIN, or ORGADMIN)
+- URL encoding tool (e.g., [urlencoder.io](https://urlencoder.io) or Postman)
+
+### Step 1: Create OAuth Security Integration
+
+Create a Security Integration using the **ACCOUNTADMIN** role:
+
+```sql
+CREATE SECURITY INTEGRATION POWER_APPS_TOKEN
+TYPE = OAUTH
+ENABLED = TRUE
+OAUTH_CLIENT = CUSTOM
+OAUTH_CLIENT_TYPE = 'CONFIDENTIAL'
+OAUTH_REDIRECT_URI = 'https://localhost.com'
+OAUTH_ISSUE_REFRESH_TOKENS = TRUE
+OAUTH_REFRESH_TOKEN_VALIDITY = 86400;
+```
+
+> **Note:** The `OAUTH_REDIRECT_URI` is where Snowflake will redirect the authorization code. We're using `https://localhost.com` for demonstration purposes.
+
+### Step 2: Gather OAuth Configuration Details
+
+1. **Get integration details:**
+   ```sql
+   DESC SECURITY INTEGRATION POWER_APPS_TOKEN;
+   ```
+   
+   Record the following values:
+   - `OAUTH_CLIENT_ID`
+   - `OAUTH_REDIRECT_URI`
+   - `OAUTH_AUTHORIZATION_ENDPOINT`
+   - `OAUTH_TOKEN_ENDPOINT`
+
+2. **Get client secret:**
+   ```sql
+   SELECT SYSTEM$SHOW_OAUTH_CLIENT_SECRETS('POWER_APPS_TOKEN');
+   ```
+   
+   This returns 2 secrets - record either one as `OAUTH_CLIENT_SECRET`.
+
+### Step 3: Request Authorization Code
+
+1. **Prepare the authorization URL:**
+   
+   First, URL-encode these parameters:
+   - `OAUTH_CLIENT_ID`
+   - `OAUTH_REDIRECT_URI`
+   
+   Then construct the authorization URL:
+   ```
+   <OAUTH_AUTHORIZATION_ENDPOINT>?response_type=code&client_id=<encoded_OAUTH_CLIENT_ID>&redirect_uri=<encoded_OAUTH_REDIRECT_URI>
+   ```
+
+2. **Complete the authorization flow:**
+   - Navigate to the authorization URL in your browser
+   - Log in with a non-admin Snowflake user
+   - Review and accept the consent prompt
+   - After consent, you'll be redirected to the `OAUTH_REDIRECT_URI`
+
+3. **Extract the authorization code:**
+   
+   The redirect URL will contain the authorization code:
+   ```
+   https://localhost.com/?code=029118413715B55DxxxxxxxxD3AD952F484380839
+   ```
+   
+   Save the `code` parameter value for the next step.
+
+### Step 4: Exchange Authorization Code for Access Token
+
+Use the authorization code to get an access token:
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/x-www-form-urlencoded;charset=UTF-8" \
+  --user "<OAUTH_CLIENT_ID>:<OAUTH_CLIENT_SECRET>" \
+  --data-urlencode "grant_type=authorization_code" \
+  --data-urlencode "code=<AUTHORIZATION_CODE>" \
+  --data-urlencode "redirect_uri=<OAUTH_REDIRECT_URI>" \
+  <OAUTH_TOKEN_ENDPOINT>
+```
+
+> **Important:** Use the original (non-encoded) values for `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, and `OAUTH_REDIRECT_URI` in this request.
+
+**Response:** You'll receive an access token and refresh token in the response.
+
+### Step 5: Refresh Access Token (Optional)
+
+Access tokens expire after 600 seconds. Use the refresh token to get a new access token without user interaction:
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/x-www-form-urlencoded;charset=UTF-8" \
+  --user "<OAUTH_CLIENT_ID>:<OAUTH_CLIENT_SECRET>" \
+  --data-urlencode "grant_type=refresh_token" \
+  --data-urlencode "refresh_token=<REFRESH_TOKEN>" \
+  --data-urlencode "redirect_uri=<OAUTH_REDIRECT_URI>" \
+  <OAUTH_TOKEN_ENDPOINT>
+```
+
+### Security Notes
+
+- Keep client secrets secure and never expose them in client-side code
+- Access tokens are short-lived (10 minutes) by design
+- Use refresh tokens to maintain long-term access without user re-authentication
+- Always use HTTPS for production redirect URIs
+
